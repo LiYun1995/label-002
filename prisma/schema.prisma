@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  WORKER
+}
+
+enum RepairStatus {
+  PENDING_ASSIGN
+  ASSIGNED
+  IN_PROGRESS
+  PENDING_INSPECTION
+  COMPLETED
+}
+
+enum RepairType {
+  PLUMBING
+  ELECTRICAL
+  DOORS_WINDOWS
+  APPLIANCES
+  OTHER
+}
+
+enum WorkerSpecialty {
+  PLUMBER
+  ELECTRICIAN
+  MASON
+  CARPENTER
+  GENERAL
+}
+
+enum OwnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          Role
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  ownerProfile  OwnerProfile?
+  workerProfile WorkerProfile?
+
+  repairRequests    RepairRequest[] @relation("owner")
+  assignedRequests  RepairRequest[] @relation("worker")
+  notifications     Notification[]
+  ownerReviews      Review[]        @relation("reviewOwner")
+  workerReviews     Review[]        @relation("reviewWorker")
+
+  @@map("users")
+}
+
+model OwnerProfile {
+  id          String     @id @default(cuid())
+  userId      String     @unique
+  roomNumber  String
+  status      OwnerStatus @default(PENDING)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("owner_profiles")
+}
+
+model WorkerProfile {
+  id          String          @id @default(cuid())
+  userId      String          @unique
+  specialty   WorkerSpecialty
+  phone       String?
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("worker_profiles")
+}
+
+model RepairRequest {
+  id               String        @id @default(cuid())
+  title            String
+  description      String
+  roomNumber       String
+  type             RepairType
+  status           RepairStatus  @default(PENDING_ASSIGN)
+  expectedDeadline DateTime?
+
+  ownerId          String
+  workerId         String?
+  assignedAt       DateTime?
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  completedAt      DateTime?
+
+  owner            User          @relation("owner", fields: [ownerId], references: [id])
+  worker           User?         @relation("worker", fields: [workerId], references: [id])
+
+  photos           RepairPhoto[]
+  review           Review?
+  notifications    Notification[] @relation("requestNotifications")
+  statusLogs       StatusLog[]
+
+  rejectReason     String?
+
+  @@map("repair_requests")
+}
+
+model RepairPhoto {
+  id        String   @id @default(cuid())
+  url       String
+  type      String   // BEFORE or AFTER
+  requestId String
+  request   RepairRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("repair_photos")
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  requestId  String   @unique
+  rating     Int
+  comment    String?
+  ownerId    String
+  workerId   String
+  createdAt  DateTime @default(now())
+
+  request    RepairRequest @relation(fields: [requestId], references: [id])
+  owner      User          @relation("reviewOwner", fields: [ownerId], references: [id])
+  worker     User          @relation("reviewWorker", fields: [workerId], references: [id])
+
+  @@map("reviews")
+}
+
+model Notification {
+  id        String         @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  read      Boolean        @default(false)
+  type      String
+  requestId String?
+  createdAt DateTime       @default(now())
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  request   RepairRequest? @relation("requestNotifications", fields: [requestId], references: [id])
+
+  @@map("notifications")
+}
+
+model StatusLog {
+  id         String        @id @default(cuid())
+  requestId  String
+  fromStatus RepairStatus?
+  toStatus   RepairStatus
+  remark     String?
+  createdAt  DateTime      @default(now())
+
+  request    RepairRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("status_logs")
+}
